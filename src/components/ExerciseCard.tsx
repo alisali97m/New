@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Check, 
   Plus, 
@@ -11,34 +11,111 @@ import {
   LineChart, 
   Sparkles,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  RefreshCw,
+  Edit3,
+  MoreVertical,
+  Camera,
+  Image as ImageIcon,
+  Eye,
+  UploadCloud
 } from 'lucide-react';
 import { ExerciseLog, SetRecord } from '../types';
 import { ComparisonResult } from '../types';
 import { soundManager } from '../utils/audio';
+import { processImageFiles } from '../utils/imageUtils';
+import { ExerciseImageModal } from './ExerciseImageModal';
 
 interface ExerciseCardProps {
   exercise: ExerciseLog;
   index: number;
+  totalExercisesCount?: number;
   previousExerciseLog: ExerciseLog | null;
   previousDayNumber?: number;
   comparison: ComparisonResult;
   onUpdateExercise: (updated: ExerciseLog) => void;
   onOpenExerciseProgress: (exerciseId: string, exerciseName: string) => void;
   onTriggerRestTimer?: () => void;
+  onOpenSwap?: () => void;
+  onOpenEdit?: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }
 
 export const ExerciseCard: React.FC<ExerciseCardProps> = ({
   exercise,
   index,
+  totalExercisesCount = 0,
   previousExerciseLog,
   previousDayNumber,
   comparison,
   onUpdateExercise,
   onOpenExerciseProgress,
-  onTriggerRestTimer
+  onTriggerRestTimer,
+  onOpenSwap,
+  onOpenEdit,
+  onMoveUp,
+  onMoveDown
 }) => {
   const [showTips, setShowTips] = useState<boolean>(false);
+  const [showMenu, setShowMenu] = useState<boolean>(false);
+  const [showImageModal, setShowImageModal] = useState<boolean>(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
+  const [isUploadingImage, setIsUploadingImage] = useState<boolean>(false);
+  const [isDraggingOverCard, setIsDraggingOverCard] = useState<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const images = exercise.images || [];
+
+  // Handle uploading new images
+  const handleFilesAdded = async (files: FileList | File[] | null) => {
+    if (!files || files.length === 0) return;
+    setIsUploadingImage(true);
+    try {
+      const newImages = await processImageFiles(files);
+      if (newImages.length > 0) {
+        const existing = exercise.images || [];
+        const updated = [...existing, ...newImages];
+        onUpdateExercise({
+          ...exercise,
+          images: updated
+        });
+        soundManager.playCheckSound();
+      }
+    } catch (err) {
+      console.error('Error handling exercise images:', err);
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  const handleUpdateImages = (updatedImages: string[]) => {
+    onUpdateExercise({
+      ...exercise,
+      images: updatedImages
+    });
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    if (e.dataTransfer.types.includes('Files')) {
+      e.preventDefault();
+      setIsDraggingOverCard(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingOverCard(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingOverCard(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFilesAdded(e.dataTransfer.files);
+    }
+  };
+
 
   // Handle set field update
   const handleSetChange = (setId: string, field: 'weight' | 'reps', value: number) => {
@@ -152,8 +229,13 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
   return (
     <div
       id={`exercise-card-${exercise.id}`}
-      className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
-        isAllSetsCompleted
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={`rounded-2xl border transition-all duration-200 overflow-hidden relative ${
+        isDraggingOverCard
+          ? 'border-emerald-400 ring-2 ring-emerald-500/50 bg-slate-900'
+          : isAllSetsCompleted
           ? 'bg-slate-900/90 border-emerald-500/40 shadow-lg shadow-emerald-950/20'
           : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
       }`}
@@ -173,6 +255,20 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                 <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                   {exercise.muscleGroup}
                 </span>
+                {images.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedImageIndex(0);
+                      setShowImageModal(true);
+                    }}
+                    className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 transition cursor-pointer"
+                    title="معاينة صور هذا التمرين"
+                  >
+                    <Eye className="w-3 h-3" />
+                    <span>{images.length} {images.length === 1 ? 'صورة' : 'صور'}</span>
+                  </button>
+                )}
                 {isAllSetsCompleted && (
                   <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-500 text-slate-950 flex items-center gap-1">
                     <Check className="w-3 h-3 stroke-[3]" /> مكتمل
@@ -185,7 +281,83 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1 shrink-0">
+            {/* Direct Image Preview / Upload Button in Top Action Bar */}
+            {images.length > 0 ? (
+              <button
+                id={`btn-preview-top-${exercise.id}`}
+                type="button"
+                onClick={() => {
+                  setSelectedImageIndex(0);
+                  setShowImageModal(true);
+                }}
+                className="p-2 text-emerald-300 hover:text-emerald-200 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 rounded-xl transition flex items-center gap-1.5 text-xs font-bold shadow-sm cursor-pointer"
+                title="معاينة صور هذا التمرين"
+              >
+                <Eye className="w-4 h-4 text-emerald-400" />
+                <span className="hidden sm:inline">معاينة ({images.length})</span>
+              </button>
+            ) : (
+              <button
+                id={`btn-add-img-top-${exercise.id}`}
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="p-2 text-slate-400 hover:text-emerald-400 hover:bg-slate-800 rounded-xl transition flex items-center gap-1 text-xs border border-transparent hover:border-slate-700 cursor-pointer"
+                title="إضافة صور للتمرين (التكنيك، ضبط الجهاز، أو الأوزان)"
+              >
+                <Camera className="w-4 h-4" />
+                <span className="hidden sm:inline">إضافة صور</span>
+              </button>
+            )}
+
+            {onOpenSwap && (
+              <button
+                id={`btn-swap-${exercise.id}`}
+                type="button"
+                onClick={onOpenSwap}
+                className="p-2 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-xl transition flex items-center gap-1 text-xs border border-transparent hover:border-slate-700"
+                title="تبديل هذا التمرين بآخر"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span className="hidden md:inline text-[11px] font-bold">تبديل</span>
+              </button>
+            )}
+
+            {onOpenEdit && (
+              <button
+                id={`btn-edit-${exercise.id}`}
+                type="button"
+                onClick={onOpenEdit}
+                className="p-2 text-slate-400 hover:text-blue-400 hover:bg-slate-800 rounded-xl transition flex items-center gap-1 text-xs border border-transparent hover:border-slate-700"
+                title="تعديل أو حذف التمرين"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span className="hidden md:inline text-[11px] font-bold">تعديل/حذف</span>
+              </button>
+            )}
+
+            {onMoveUp && index > 0 && (
+              <button
+                type="button"
+                onClick={onMoveUp}
+                className="p-1.5 text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded-lg transition"
+                title="تقديم التمرين للأعلى"
+              >
+                <ChevronUp className="w-3.5 h-3.5" />
+              </button>
+            )}
+
+            {onMoveDown && totalExercisesCount > 0 && index < totalExercisesCount - 1 && (
+              <button
+                type="button"
+                onClick={onMoveDown}
+                className="p-1.5 text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded-lg transition"
+                title="تأخير التمرين للأسفل"
+              >
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+            )}
+
             <button
               id={`btn-progress-${exercise.id}`}
               type="button"
@@ -223,6 +395,104 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
             </span>
           </div>
         </div>
+
+        {/* Exercise Photos Strip with Preview & Upload Controls */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5 p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/90">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-slate-400 flex items-center gap-1 font-medium">
+              <Camera className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>صور التمرين:</span>
+            </span>
+
+            {images.length > 0 ? (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {/* Thumbnails */}
+                {images.slice(0, 4).map((imgUrl, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => {
+                      setSelectedImageIndex(i);
+                      setShowImageModal(true);
+                    }}
+                    className="w-8 h-8 rounded-lg overflow-hidden border border-slate-700 hover:border-emerald-400 transition hover:scale-105 shrink-0 relative group shadow-sm cursor-pointer"
+                    title={`انقر لمعاينة الصورة ${i + 1}`}
+                  >
+                    <img
+                      src={imgUrl}
+                      alt={`صورة ${i + 1}`}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-emerald-500/30 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                      <Eye className="w-3.5 h-3.5 text-white stroke-[2.5]" />
+                    </div>
+                  </button>
+                ))}
+
+                {images.length > 4 && (
+                  <span className="text-[11px] font-mono text-slate-300 font-bold px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700">
+                    +{images.length - 4}
+                  </span>
+                )}
+
+                {/* Preview Button */}
+                <button
+                  id={`btn-preview-photos-${exercise.id}`}
+                  type="button"
+                  onClick={() => {
+                    setSelectedImageIndex(0);
+                    setShowImageModal(true);
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm"
+                  title="معاينة كافة صور هذا التمرين بجودة عالية"
+                >
+                  <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>معاينة الصور ({images.length})</span>
+                </button>
+              </div>
+            ) : (
+              <span className="text-xs text-slate-500">
+                لا توجد صور مرفقة (التقط أو اسحب صورة للجهاز، المقعد، أو التكنيك)
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files) {
+                  handleFilesAdded(e.target.files);
+                  e.target.value = '';
+                }
+              }}
+            />
+
+            <button
+              id={`btn-upload-photos-${exercise.id}`}
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploadingImage}
+              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+              title="تحميل صورة واحدة أو أكثر لهذا التمرين"
+            >
+              <Plus className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{images.length > 0 ? 'إضافة صورة' : 'تحميل صور'}</span>
+            </button>
+          </div>
+        </div>
+
+        {isUploadingImage && (
+          <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-950/30 p-2 rounded-lg border border-emerald-500/20 animate-pulse">
+            <div className="w-3.5 h-3.5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+            <span>جاري معالجة وتحسين الصور المرفوعة...</span>
+          </div>
+        )}
 
         {/* Coach Tips Expandable */}
         {showTips && (
@@ -510,6 +780,16 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Image Preview & Gallery Modal */}
+      {showImageModal && (
+        <ExerciseImageModal
+          exercise={exercise}
+          initialIndex={selectedImageIndex}
+          onClose={() => setShowImageModal(false)}
+          onUpdateImages={handleUpdateImages}
+        />
+      )}
     </div>
   );
 };

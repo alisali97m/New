@@ -32,6 +32,7 @@ export interface ExerciseLog {
   sets: SetRecord[];
   notes?: string;
   completed?: boolean;
+  images?: string[];
 }
 
 export interface DayWorkout {
@@ -67,3 +68,53 @@ export interface ExerciseProgressPoint {
   totalReps: number;
   setsCount: number;
 }
+
+export interface CourseRecord {
+  id: string;
+  courseNumber: number; // 1, 2, 3, etc.
+  title: string;
+  startDate: string;
+  endDate?: string;
+  isCompleted: boolean;
+  days: DayWorkout[];
+  currentDay: number;
+  notes?: string;
+}
+
+export interface ReportExerciseStat {
+  exerciseId: string;
+  name: string;
+  englishName: string;
+  muscleGroup: string;
+  category: string;
+  firstRecordedWeight: number;
+  highestWeight: number;
+  weightDelta: number;
+  weightDeltaPercent: number;
+  totalSets: number;
+  totalReps: number;
+  totalVolume: number;
+  status: 'increased' | 'maintained' | 'decreased' | 'steady';
+}
+
+export interface CourseSummaryReport {
+  courseNumber: number;
+  courseTitle: string;
+  startDate: string;
+  endDate?: string;
+  totalCompletedDays: number;
+  completionRate: number;
+  workoutDaysCompleted: number;
+  restDaysCompleted: number;
+  grandTotalVolume: number;
+  grandTotalSets: number;
+  grandTotalReps: number;
+  exerciseStats: ReportExerciseStat[];
+  muscleBreakdown: {
+    muscle: string;
+    volume: number;
+    sets: number;
+    percentage: number;
+  }[];
+}
+
