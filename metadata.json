@@ -1,0 +1,6 @@
+{
+  "name": "متابع كورس التمرين 45 يوم",
+  "description": "تطبيق لمتابعة جدول التمارين الرياضية لمدة 45 يوماً مع نظام الراحة الدورية وتسجيل الأوزان والتكرارات ومقارنة التطور",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
